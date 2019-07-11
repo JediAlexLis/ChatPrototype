@@ -14,6 +14,7 @@
 
 #define LENGTH_COMMAND 7
 #define MSG_ENTER_COMMAND "Enter a command: "
+#define MSG_ERROR_COMMAND "Unidentified command! "
 
 // trimming \n
 void trim_string (char *);
