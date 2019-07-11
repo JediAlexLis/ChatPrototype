@@ -25,6 +25,7 @@ int main(void) {
                 printf (MSG_ERROR_ENTER);
                 return (EXIT_FAILURE);
             }
+            
             if (strcmp (command, "0") == 0)
                 return (EXIT_SUCCESS);
             else if (strcmp (command, "1") == 0)
@@ -39,10 +40,25 @@ int main(void) {
     }
     
     printf (MSG_SUCCESSFUL_CONNECTION);
+    /*
     printf (MSG_ENTER_WHEN_CONNECTED);
     
-    
-    
+    while (1) {
+        if (fgets (command, LENGTH_COMMAND, stdin) == NULL) {
+            printf (MSG_ERROR_ENTER);
+            return (EXIT_FAILURE);
+        }
+        
+        if (strcmp (command, "0") == 0)
+            return (EXIT_SUCCESS);
+        else if (strcmp (command, "1") == 0)
+            login();
+        else
+            printf (MSG_ERROR_COMMAND);
+
+        printf (MSG_ENTER_WHEN_CONNECTED);
+    }
+    */
     /*
     printf ("If you have an account, enter 1 and login\n");
     printf ("Otherwise, enter 2 to register a new account\n");
