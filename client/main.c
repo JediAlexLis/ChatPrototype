@@ -9,7 +9,7 @@
 
 // main menu
 int main(void) {
-    char command[LENGTH_COMMAND];
+    char command[LENGTH_COMMAND] = {};
     
     printf ("Welcome to ChatPrototype!\n");
     printf ("To find out which command is referred to which action, enter /help\n");
