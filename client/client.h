@@ -11,13 +11,48 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <sys/types.h>
+#include <pthread.h>
 
+#define LENGTH_NICKNAME 15
 #define LENGTH_COMMAND 7
+#define MSG_CONNECTING "Connecting to the server...\n"
+#define MSG_ERR_CONNECTION "It's unable to connect to the server!\n"
+#define MSG_ENTER_WHEN_ERR_CONNECTION "Choose an option - 1 to try again or 0 to exit: "
+#define MSG_ERROR_ENTER "Error in enter a command! Closing the program!\n"
+#define MSG_SUCCESSFUL_CONNECTION "You're connected to the server successfully!\n"
+#define MSG_ENTER_WHEN_CONNECTED "Choose an option - 1 to login, 2 to register or 0 to exit: "
 #define MSG_ENTER_COMMAND "Enter a command: "
-#define MSG_ERROR_COMMAND "Unidentified command! "
+#define MSG_ERROR_COMMAND "Unidentified command! Try again\n"
+
+// socket descriptor
+extern int sock;
+// variable for containing a command
+extern char command[LENGTH_COMMAND];
+
+/*
+ * Structure of request. 
+ */
+typedef struct request_s {
+    int type;
+    int buf_length;
+    char * buffer;    
+} request;
 
 // trimming \n
 void trim_string (char *);
+
+// connecting to the server
+int connect_server();
+// log in
+int login();
+// registration
+int registration();
+
+// main menu
+void main_menu();
 
 // connecting to the main chat
 void main_chat();
