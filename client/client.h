@@ -58,7 +58,7 @@ void help_change_message();
 // calling help for deleting messages
 void help_delete_message();
 // calling help for inviting of new members of a group
-void help_change_message();
+void help_invite_member();
 // calling help for choosing an object of an action
 void help_choose();
 
