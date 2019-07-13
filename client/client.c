@@ -5,27 +5,36 @@ char command[LENGTH_COMMAND];
 
 // trimming \n
 void trim_string (char * string) {
-    int i = 0;
-    while (i++ < LENGTH_COMMAND) {
-        if (string[i] = '\n')
-        {
-            string = '\0';
-            break;
-        }
-    }
+    int i = strlen (string) - 1;
+    if (string[i] == '\n') string [i] = '\0';
 }
 
 // connecting to the server
 int connect_server() {
+    printf ("0 - successful, -1 - unsuccessful: ");
+    int choice = -1;
+    scanf ("%d", &choice);
+    getchar ();
     
+    return choice;
 }
 // log in
 int login() {
+    printf ("1 - successful, 0 - cancel, -1 - unsuccessful: ");
+    int choice;
+    scanf ("%d", &choice);
+    getchar ();
     
+    return choice;
 }
 // registration
 int registration() {
+    printf ("1 - successful, 0 - cancel, -1 - unsuccessful: ");
+    int choice;
+    scanf ("%d", &choice);
+    getchar ();
     
+    return choice;
 }
 
 // main menu
@@ -34,7 +43,12 @@ void main_menu() {
     printf ("To find out which command is referred to which action, enter /help\n");
     printf (MSG_ENTER_COMMAND);
     
-    while (fgets (command, LENGTH_COMMAND, stdin) != NULL) {
+    while (1) {
+        if (fgets (command, LENGTH_COMMAND, stdin) == NULL) {
+            printf (MSG_ERROR);
+            break;
+        }
+        
         trim_string(command);
         
         if (strcmp (command, "/help") == 0)
@@ -104,7 +118,11 @@ void choose() {
 
 // calling help for main menu
 void help_main_menu() {
-    
+    printf ("\t1 - connect to the main chat\n");
+    printf ("\t2 - connect to a group chat\n");
+    printf ("\t3 - create a new chat\n");
+    printf ("\t4 - quit a group chat\n");
+    printf ("\t/exit - exit from the program\n");
 }
 // calling help for a main chat
 void help_main_chat() {
