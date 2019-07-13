@@ -14,8 +14,9 @@ char command[LENGTH_COMMAND] = {};
 int main(void) {
     int connect_status;
     
+    // connection to server
     printf (MSG_CONNECTING);
-    while ((connect_status = connect_server()) != 0) {
+    while ((connect_status = connect_server()) != 0) { // == 0 means it connected successful
         printf (MSG_ERR_CONNECTION);
         printf (MSG_ENTER_WHEN_ERR_CONNECTION);
         
@@ -26,9 +27,11 @@ int main(void) {
                 return (EXIT_FAILURE);
             }
             
-            if (strcmp (command, "0") == 0)
+            trim_string (command);
+            
+            if (strcmp (command, "0") == 0) // exit
                 return (EXIT_SUCCESS);
-            else if (strcmp (command, "1") == 0)
+            else if (strcmp (command, "1") == 0)    // try again
                 break;
             else
                 printf (MSG_ERROR_COMMAND);
@@ -40,44 +43,41 @@ int main(void) {
     }
     
     printf (MSG_SUCCESSFUL_CONNECTION);
-    /*
+    
     printf (MSG_ENTER_WHEN_CONNECTED);
     
+    // login or registration
+    int login_status, registration_status;
     while (1) {
         if (fgets (command, LENGTH_COMMAND, stdin) == NULL) {
             printf (MSG_ERROR_ENTER);
             return (EXIT_FAILURE);
         }
+
+        trim_string (command);
         
         if (strcmp (command, "0") == 0)
             return (EXIT_SUCCESS);
-        else if (strcmp (command, "1") == 0)
-            login();
-        else
+        else if (strcmp (command, "1") == 0) {
+            if ((login_status = login()) == 1)  // == 1 - logged in successfully
+                break;
+            else if (login_status == -1) { // == -1 - logged in unsuccessfully
+                printf (MSG_ERROR);
+                return (EXIT_FAILURE);
+            }
+        } else if (strcmp (command, "2") == 0) {
+            if ((registration_status = registration()) == -1) {  // == 1 - registered unsuccessfully
+                printf (MSG_DISCONNECTION);
+                return (EXIT_FAILURE);
+            }
+        } else
             printf (MSG_ERROR_COMMAND);
 
         printf (MSG_ENTER_WHEN_CONNECTED);
     }
-    */
-    /*
-    printf ("If you have an account, enter 1 and login\n");
-    printf ("Otherwise, enter 2 to register a new account\n");
-    printf ("If you want to leave this program, enter /exit\n");
-    printf (MSG_ENTER_COMMAND);
-    while (fgets (command, LENGTH_COMMAND, stdin) != NULL) {
-        if (strcmp (command, "/exit") == 0)
-            break;
-        else {
-            if (strcmp (command, "1") == 0)
-                login();
-            else if (strcmp (command, "2") == 0)
-                registration();
-            else
-                printf (MSG_ERROR_COMMAND);
-        }
-        
-    }
-    */
+    
+    // enter the main menu
+    main_menu();
 
     return (EXIT_SUCCESS);
 }
