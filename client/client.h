@@ -24,6 +24,8 @@
 #define MSG_ERROR_ENTER "Error in enter a command! Closing the program!\n"
 #define MSG_SUCCESSFUL_CONNECTION "You're connected to the server successfully!\n"
 #define MSG_ENTER_WHEN_CONNECTED "Choose an option - 1 to login, 2 to register or 0 to exit: "
+#define MSG_DISCONNECTION "It's disconnection from the server!\nNow forced shutdown of the program will happen!\n"
+#define MSG_ERROR "Something happened wrong!\n"
 #define MSG_ENTER_COMMAND "Enter a command: "
 #define MSG_ERROR_COMMAND "Unidentified command! Try again\n"
 
