@@ -15,13 +15,27 @@
 #include <netinet/in.h>
 #include <sys/types.h>
 #include <pthread.h>
+#include <ncurses.h>
+#include <arpa/inet.h>
+#include <errno.h>
+#include <limits.h>
 
 #define LENGTH_NICKNAME 15
 #define LENGTH_COMMAND 7
+#define LENGTH_RESPONSE_MESSAGE 100
+
+#define ERROR_THREAD -3
+#define ERROR_INPUT -2
+#define ERROR_CONNECTION -1
+
+#define TYPE_CHAT_RECEIVE (uint8_t) 1
+#define TYPE_CHAT_SEND (uint8_t) 2
+
 #define MSG_CONNECTING "Connecting to the server...\n"
 #define MSG_ERR_CONNECTION "It's unable to connect to the server!\n"
 #define MSG_ENTER_WHEN_ERR_CONNECTION "Choose an option - 1 to try again or 0 to exit: "
 #define MSG_ERROR_ENTER "Error in enter a command! Closing the program!\n"
+#define MSG_ERROR_THREADS "Error in creating of thread! Closing the program!\n"
 #define MSG_SUCCESSFUL_CONNECTION "You're connected to the server successfully!\n"
 #define MSG_ENTER_WHEN_CONNECTED "Choose an option - 1 to login, 2 to register or 0 to exit: "
 #define MSG_DISCONNECTION "It's disconnection from the server!\nNow forced shutdown of the program will happen!\n"
@@ -35,35 +49,42 @@ extern int sock;
 extern char command[LENGTH_COMMAND];
 
 /*
- * Structure of request. 
+ * Structure of message. 
  */
-typedef struct request_s {
-    int type;
+typedef struct message_s {
+    uint8_t type;
     int buf_length;
     char * buffer;    
-} request;
+} message_t;
 
 // trimming \n
 void trim_string (char *);
 
 // connecting to the server
 int connect_server();
+// enter an account
+int enter_account();
 // log in
 int login();
 // registration
 int registration();
 
 // main menu
-void main_menu();
+int main_menu();
 
 // connecting to the main chat
-void main_chat();
+int main_chat();
 // connecting to a group chat
-void group_chat();
+int group_chat();
 // creating a new group
-void create_group();
+int create_group();
 // quitting from a group
-void quit_group();
+int quit_group();
+
+// function for a thread of sending requests
+void* send_request();
+// function for a thread of receiving responses
+void* recv_response();
 
 // sending a message
 void send_message();
