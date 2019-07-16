@@ -57,10 +57,10 @@ int enter_account() {
             return 0;
         }
         else if (strcmp (command, "1") == 0) {  // to log in
-            if ((login_status = login()) == -2) {   // error in input
+            if ((login_status = login()) == ERROR_INPUT) {   // error in input
                 delwin (enter_account_window);
                 return ERROR_INPUT;
-            } else if (login_status == -1) {    // error in connection
+            } else if (login_status == ERROR_CONNECTION) {    // error in connection
                 delwin (enter_account_window);
                 return ERROR_CONNECTION;
             } else if (login_status == 1) {     // logged in successfully
@@ -70,10 +70,10 @@ int enter_account() {
                 enter_account_window = newwin (LINES, COLS, 0, 0);
             }
         } else if (strcmp (command, "2") == 0) {    // to register
-            if ((registration_status = registration()) == -2) { // error in input
+            if ((registration_status = registration()) == ERROR_INPUT) { // error in input
                 delwin (enter_account_window);
                 return ERROR_INPUT;
-            } else if (registration_status == -1) {             // error in connection
+            } else if (registration_status == ERROR_CONNECTION) {             // error in connection
                 delwin (enter_account_window);
                 return ERROR_CONNECTION;
             } else {                                            // cancel of registration or registered successfully
