@@ -11,15 +11,15 @@ void trim_string (char * string) {
 
 // connecting to the server
 int connect_server() {
-    
+    /*
     printf ("0 - successful, -1 - unsuccessful: ");
     int result = -1;
     scanf ("%d", &result);
     getchar ();
     
     return result;
+    */
     
-    /*
     // creating a socket
     if ((sock = socket (AF_INET, SOCK_STREAM, 0)) == -1)
         return -1;
@@ -33,7 +33,6 @@ int connect_server() {
     
     // connecting to the server by the socket
     return connect (sock, (struct sockaddr*) &server, sizeof (server));
-    */
 }
 // enter an account
 int enter_account() {
@@ -94,35 +93,172 @@ int enter_account() {
 }
 // log in
 int login() {
+    /*
+     #include <form.h>
+
+int main()
+{	FIELD *field[3];
+	FORM  *my_form;
+	int ch;
+	
+	// Initialize curses
+	initscr();
+	cbreak();
+	noecho();
+	keypad(stdscr, TRUE);
+
+	/* Initialize the fields
+	field[0] = new_field(1, 10, 4, 18, 0, 0);
+	field[1] = new_field(1, 10, 6, 18, 0, 0);
+	field[2] = NULL;
+
+	/* Set field options
+	set_field_back(field[0], A_UNDERLINE); 	/* Print a line for the option
+	field_opts_off(field[0], O_AUTOSKIP);  	/* Don't go to next field when this
+						/* Field is filled up
+	set_field_back(field[1], A_UNDERLINE); 
+	field_opts_off(field[1], O_AUTOSKIP);
+
+	/* Create the form and post it
+	my_form = new_form(field);
+	post_form(my_form);
+	refresh();
+	
+	mvprintw(4, 10, "Value 1:");
+	mvprintw(6, 10, "Value 2:");
+	refresh();
+
+	/* Loop through to get user requests
+	while((ch = getch()) != KEY_F(1))
+	{	switch(ch)
+		{	case KEY_DOWN:
+				/* Go to next field
+				form_driver(my_form, REQ_NEXT_FIELD);
+				/* Go to the end of the present buffer
+				/* Leaves nicely at the last character
+				form_driver(my_form, REQ_END_LINE);
+				break;
+			case KEY_UP:
+				/* Go to previous field
+				form_driver(my_form, REQ_PREV_FIELD);
+				form_driver(my_form, REQ_END_LINE);
+				break;
+			default:
+				/* If this is a normal character, it gets
+				/* Printed
+				form_driver(my_form, ch);
+				break;
+		}
+	}
+
+	/* Un post form and free the memory
+	unpost_form(my_form);
+	free_form(my_form);
+	free_field(field[0]);
+	free_field(field[1]); 
+
+	endwin();
+	return 0;
+}
+     */
     WINDOW *login_window = newwin (LINES, COLS, 0, 0);
     
+    char nickname[LENGTH_NICKNAME];
+    char password[LENGTH_PASSWORD];
+    message_t message;
+    
     /*----------------------------*/
-    wprintw (login_window, "1 - successfully, 0 - cancel, -1 - disconnection, -2 - error in input: ");
+    /*wprintw (login_window, "1 - successfully, 0 - cancel, -1 - disconnection, -2 - error in input: ");
     wrefresh (login_window);
     
     int result;
-    wscanw (login_window, "%d", &result);
+    wscanw (login_window, "%d", &result);*/
     /*----------------------------*/
+    
+    while (1) {
+        memset (nickname, '\0', LENGTH_NICKNAME);
+        memset (password, '\0', LENGTH_PASSWORD);
+        
+        wprintw (login_window, "Enter a nickname: ");
+        wrefresh (login_window);
+        wscanw (login_window, "%s", &nickname);
+
+        wprintw (login_window, "Enter a password: ");
+        wrefresh (login_window);
+        wscanw (login_window, "%s", &password);
+
+        memset ((char *) &message, '\0', sizeof (message));
+
+        message.type = 0;
+        strncpy (message.buffer, nickname, LENGTH_NICKNAME);
+        strncpy (message.buffer + (LENGTH_NICKNAME + 1), password, LENGTH_PASSWORD);
+
+        send (sock, (void *) &message, sizeof (message), 0);
+        memset ((char *) &message, '\0', sizeof (message));
+        recv (sock, (void *) &message, sizeof (message), 0);
+        
+        wprintw (login_window, "%s\n", message.buffer);
+        wrefresh (login_window);
+        if (!message.type)
+            break;
+        
+    }
+    
+    
+    
+    
     
     delwin (login_window);
     
-    return result;
+    return 1;
 }
 // registration
 int registration() {
     WINDOW *registration_window = newwin (LINES, COLS, 0, 0);
     
     /*----------------------------*/
-    wprintw (registration_window, "1 - successfully, 0 - cancel, -1 - disconnection, -2 - error in input: ");
+    /*wprintw (registration_window, "1 - successfully, 0 - cancel, -1 - disconnection, -2 - error in input: ");
     wrefresh (registration_window);
     
     int result;
-    wscanw (registration_window, "%d", &result);
+    wscanw (registration_window, "%d", &result);*/
     /*----------------------------*/
+    
+    char nickname[LENGTH_NICKNAME];
+    char password[LENGTH_PASSWORD];
+    message_t message;
+    
+    while (1) {
+        memset (nickname, '\0', LENGTH_NICKNAME);
+        memset (password, '\0', LENGTH_PASSWORD);
+        
+        wprintw (registration_window, "Enter a nickname: ");
+        wrefresh (registration_window);
+        wscanw (registration_window, "%s", &nickname);
+
+        wprintw (registration_window, "Enter a password: ");
+        wrefresh (registration_window);
+        wscanw (registration_window, "%s", &password);
+
+        memset ((char *) &message, '\0', sizeof (message));
+
+        message.type = 1;
+        strncpy (message.buffer, nickname, LENGTH_NICKNAME);
+        strncpy (message.buffer + (LENGTH_NICKNAME + 1), password, LENGTH_PASSWORD);
+
+        send (sock, (void *) &message, sizeof (message), 0);
+        memset ((char *) &message, '\0', sizeof (message));
+        recv (sock, (void *) &message, sizeof (message), 0);
+        
+        wprintw (registration_window, "%s\n", message.buffer);
+        wrefresh (registration_window);
+        if (!message.type)
+            break;
+    }
     
     delwin (registration_window);
     
-    return result;
+    return 1;
 }
 
 // main menu
@@ -283,7 +419,7 @@ int group_chat() {
     return result;
 }
 // creating a new group
-int create_group() {
+int create_group() {   
     WINDOW *create_group_win = newwin (LINES, COLS, 0, 0);
     
     /*----------------------------*/
@@ -328,7 +464,7 @@ void* recv_response() {
     WINDOW *recv_response_window = newwin (LINES * 3 / 4, COLS, 0, 0);
 
     message_t *message = (message_t *) malloc (sizeof (message_t));
-    message->buffer = (char *) malloc (sizeof (char) * LENGTH_RESPONSE_MESSAGE);
+    //message->buffer = (char *) malloc (sizeof (char) * LENGTH_RESPONSE_MESSAGE);
     
     int result = 0;
     

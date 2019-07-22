@@ -11,7 +11,7 @@ int sock;
 char command[LENGTH_COMMAND] = {};
 
 // entrance to the program
-int main(void) {
+int main (void) {
     
     int connect_status;
     

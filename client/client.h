@@ -21,8 +21,10 @@
 #include <limits.h>
 
 #define LENGTH_NICKNAME 15
+#define LENGTH_PASSWORD 30
 #define LENGTH_COMMAND 7
 #define LENGTH_RESPONSE_MESSAGE 100
+#define LENGTH_BUFFER 128
 
 #define ERROR_THREAD -3
 #define ERROR_INPUT -2
@@ -48,13 +50,10 @@ extern int sock;
 // variable for containing a command
 extern char command[LENGTH_COMMAND];
 
-/*
- * Structure of message. 
- */
+// structure of a message
 typedef struct message_s {
     uint8_t type;
-    int buf_length;
-    char * buffer;    
+    char buffer[LENGTH_BUFFER];    
 } message_t;
 
 // trimming \n
