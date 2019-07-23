@@ -1,3 +1,5 @@
+#include <unicode/umachine.h>
+
 #include "client.h"
 
 int sock;
@@ -11,15 +13,6 @@ void trim_string (char * string) {
 
 // connecting to the server
 int connect_server() {
-    /*
-    printf ("0 - successful, -1 - unsuccessful: ");
-    int result = -1;
-    scanf ("%d", &result);
-    getchar ();
-    
-    return result;
-    */
-    
     // creating a socket
     if ((sock = socket (AF_INET, SOCK_STREAM, 0)) == -1)
         return -1;
@@ -38,6 +31,10 @@ int connect_server() {
 int enter_account() {
     WINDOW *enter_account_window = newwin (LINES, COLS, 0, 0);
     
+    // request informing the server that a user is going to exit the program
+    message_t *exit = (message_t *) malloc (sizeof (message_t));
+    exit->type = 0;
+    
     wprintw (enter_account_window, MSG_ENTER_WHEN_CONNECTED);
     refresh ();
     
@@ -46,21 +43,29 @@ int enter_account() {
     while (1) {
         if (wgetnstr (enter_account_window, command, LENGTH_COMMAND) == ERR) { // error with input
             delwin (enter_account_window);
+            free (exit);
             return ERROR_INPUT;
         }
 
         trim_string (command);
         
         if (strcmp (command, "0") == 0) {   // to exit the program
+            if (send (sock, (void *) exit, sizeof (message_t), 0) == -1) {
+                delwin (enter_account_window);
+                free (exit);
+                return ERROR_CONNECTION;
+            }
             delwin (enter_account_window);
             return 0;
         }
         else if (strcmp (command, "1") == 0) {  // to log in
             if ((login_status = login()) == ERROR_INPUT) {   // error in input
                 delwin (enter_account_window);
+                free (exit);
                 return ERROR_INPUT;
             } else if (login_status == ERROR_CONNECTION) {    // error in connection
                 delwin (enter_account_window);
+                free (exit);
                 return ERROR_CONNECTION;
             } else if (login_status == 1) {     // logged in successfully
                 break;
@@ -71,9 +76,11 @@ int enter_account() {
         } else if (strcmp (command, "2") == 0) {    // to register
             if ((registration_status = registration()) == ERROR_INPUT) { // error in input
                 delwin (enter_account_window);
+                free (exit);
                 return ERROR_INPUT;
             } else if (registration_status == ERROR_CONNECTION) {             // error in connection
                 delwin (enter_account_window);
+                free (exit);
                 return ERROR_CONNECTION;
             } else {                                            // cancel of registration or registered successfully
                 delwin (enter_account_window);
@@ -89,173 +96,137 @@ int enter_account() {
     }
     
     delwin (enter_account_window);
+    free (exit);
     return 1;
 }
 // log in
+// 1 - successfully, 0 - cancel, -1 - disconnection, -2 - error in input
 int login() {
-    /*
-     #include <form.h>
-
-int main()
-{	FIELD *field[3];
-	FORM  *my_form;
-	int ch;
-	
-	// Initialize curses
-	initscr();
-	cbreak();
-	noecho();
-	keypad(stdscr, TRUE);
-
-	/* Initialize the fields
-	field[0] = new_field(1, 10, 4, 18, 0, 0);
-	field[1] = new_field(1, 10, 6, 18, 0, 0);
-	field[2] = NULL;
-
-	/* Set field options
-	set_field_back(field[0], A_UNDERLINE); 	/* Print a line for the option
-	field_opts_off(field[0], O_AUTOSKIP);  	/* Don't go to next field when this
-						/* Field is filled up
-	set_field_back(field[1], A_UNDERLINE); 
-	field_opts_off(field[1], O_AUTOSKIP);
-
-	/* Create the form and post it
-	my_form = new_form(field);
-	post_form(my_form);
-	refresh();
-	
-	mvprintw(4, 10, "Value 1:");
-	mvprintw(6, 10, "Value 2:");
-	refresh();
-
-	/* Loop through to get user requests
-	while((ch = getch()) != KEY_F(1))
-	{	switch(ch)
-		{	case KEY_DOWN:
-				/* Go to next field
-				form_driver(my_form, REQ_NEXT_FIELD);
-				/* Go to the end of the present buffer
-				/* Leaves nicely at the last character
-				form_driver(my_form, REQ_END_LINE);
-				break;
-			case KEY_UP:
-				/* Go to previous field
-				form_driver(my_form, REQ_PREV_FIELD);
-				form_driver(my_form, REQ_END_LINE);
-				break;
-			default:
-				/* If this is a normal character, it gets
-				/* Printed
-				form_driver(my_form, ch);
-				break;
-		}
-	}
-
-	/* Un post form and free the memory
-	unpost_form(my_form);
-	free_form(my_form);
-	free_field(field[0]);
-	free_field(field[1]); 
-
-	endwin();
-	return 0;
-}
-     */
     WINDOW *login_window = newwin (LINES, COLS, 0, 0);
     
-    char nickname[LENGTH_NICKNAME];
-    char password[LENGTH_PASSWORD];
-    message_t message;
-    
-    /*----------------------------*/
-    /*wprintw (login_window, "1 - successfully, 0 - cancel, -1 - disconnection, -2 - error in input: ");
-    wrefresh (login_window);
-    
-    int result;
-    wscanw (login_window, "%d", &result);*/
-    /*----------------------------*/
+    char *nickname = (char *) malloc (LENGTH_NICKNAME * sizeof (char));
+    char *password = (char *) malloc (LENGTH_PASSWORD * sizeof (char));
+    message_t *message = (message_t *) malloc (sizeof (message_t));
     
     while (1) {
         memset (nickname, '\0', LENGTH_NICKNAME);
         memset (password, '\0', LENGTH_PASSWORD);
         
+        wprintw (login_window, "Enter /cancel to return back.\n\n");
         wprintw (login_window, "Enter a nickname: ");
         wrefresh (login_window);
-        wscanw (login_window, "%s", &nickname);
+        wgetnstr (login_window, nickname, LENGTH_NICKNAME);
+        if (strcmp (nickname, "/cancel") == 0) {
+            free (nickname);
+            free (password);
+            free (message);
+            delwin (login_window);
+            return 0;
+        }
 
         wprintw (login_window, "Enter a password: ");
         wrefresh (login_window);
-        wscanw (login_window, "%s", &password);
+        wgetnstr (login_window, password, LENGTH_PASSWORD);
+        if (strcmp (password, "/cancel") == 0) {
+            free (nickname);
+            free (password);
+            free (message);
+            delwin (login_window);
+            return 0;
+        }
 
-        memset ((char *) &message, '\0', sizeof (message));
+        memset ((char *) message, '\0', sizeof (message_t));
 
-        message.type = 0;
-        strncpy (message.buffer, nickname, LENGTH_NICKNAME);
-        strncpy (message.buffer + (LENGTH_NICKNAME + 1), password, LENGTH_PASSWORD);
+        message->type = 1;
+        strncpy (message->buffer, nickname, LENGTH_NICKNAME);
+        strncpy (message->buffer + (LENGTH_NICKNAME + 1), password, LENGTH_PASSWORD);
 
-        send (sock, (void *) &message, sizeof (message), 0);
-        memset ((char *) &message, '\0', sizeof (message));
-        recv (sock, (void *) &message, sizeof (message), 0);
-        
-        wprintw (login_window, "%s\n", message.buffer);
-        wrefresh (login_window);
-        if (!message.type)
+        // send a request
+        if (send (sock, (void *) message, sizeof (message_t), 0) == -1)
+            return ERROR_CONNECTION;
+
+        memset ((char *) message, '\0', sizeof (message_t));
+        // receive a response
+        if (recv (sock, (void *) message, sizeof (message_t), 0) == -1)
+            return ERROR_CONNECTION;
+        // check if type is equal to 0, that is logging was done successfully
+        if (!message->type)
             break;
         
+        // print a message in case of unsuccessful logging
+        wprintw (login_window, "%s\n", message->buffer);
+        wrefresh (login_window);
     }
     
-    
-    
-    
-    
+    free (nickname);
+    free (password);
+    free (message);
     delwin (login_window);
     
     return 1;
 }
 // registration
+// 1 - successfully, 0 - cancel, -1 - disconnection, -2 - error in input
 int registration() {
     WINDOW *registration_window = newwin (LINES, COLS, 0, 0);
     
-    /*----------------------------*/
-    /*wprintw (registration_window, "1 - successfully, 0 - cancel, -1 - disconnection, -2 - error in input: ");
-    wrefresh (registration_window);
-    
-    int result;
-    wscanw (registration_window, "%d", &result);*/
-    /*----------------------------*/
-    
-    char nickname[LENGTH_NICKNAME];
-    char password[LENGTH_PASSWORD];
-    message_t message;
+    char *nickname = (char *) malloc (LENGTH_NICKNAME * sizeof (char));
+    char *password = (char *) malloc (LENGTH_PASSWORD * sizeof (char));
+    message_t *message = (message_t *) malloc (sizeof (message_t));
     
     while (1) {
         memset (nickname, '\0', LENGTH_NICKNAME);
         memset (password, '\0', LENGTH_PASSWORD);
         
+	wprintw (registration_window, "Enter /cancel to return back.\n\n");
         wprintw (registration_window, "Enter a nickname: ");
         wrefresh (registration_window);
-        wscanw (registration_window, "%s", &nickname);
+        wgetnstr (registration_window, nickname, LENGTH_NICKNAME);
+        if (strcmp (nickname, "/cancel") == 0) {
+            free (nickname);
+            free (password);
+            free (message);
+            delwin (registration_window);
+            return 0;
+        }
 
         wprintw (registration_window, "Enter a password: ");
         wrefresh (registration_window);
-        wscanw (registration_window, "%s", &password);
+        wgetnstr (registration_window, password, LENGTH_PASSWORD);
+        if (strcmp (password, "/cancel") == 0) {
+            free (nickname);
+            free (password);
+            free (message);
+            delwin (registration_window);
+            return 0;
+        }
 
-        memset ((char *) &message, '\0', sizeof (message));
+        memset ((char *) message, '\0', sizeof (message_t));
 
-        message.type = 1;
-        strncpy (message.buffer, nickname, LENGTH_NICKNAME);
-        strncpy (message.buffer + (LENGTH_NICKNAME + 1), password, LENGTH_PASSWORD);
+        message->type = 2;
+        strncpy (message->buffer, nickname, LENGTH_NICKNAME);
+        strncpy (message->buffer + (LENGTH_NICKNAME + 1), password, LENGTH_PASSWORD);
 
-        send (sock, (void *) &message, sizeof (message), 0);
-        memset ((char *) &message, '\0', sizeof (message));
-        recv (sock, (void *) &message, sizeof (message), 0);
+	// send a request
+        if (send (sock, (void *) message, sizeof (message_t), 0) == -1)
+            return ERROR_CONNECTION;
+        memset ((char *) message, '\0', sizeof (message_t));
+        // receive a response
+        if (recv (sock, (void *) message, sizeof (message_t), 0) == -1)
+            return ERROR_CONNECTION;
         
-        wprintw (registration_window, "%s\n", message.buffer);
-        wrefresh (registration_window);
-        if (!message.type)
+	// check if type is equal to 0, that is registration was done successfully
+        if (!message->type)
             break;
+
+	// print a message in case of unsuccessful registration
+	wprintw (registration_window, "%s\n", message->buffer);
+        wrefresh (registration_window);
     }
-    
+
+    free (nickname);
+    free (password);
+    free (message);
     delwin (registration_window);
     
     return 1;
@@ -264,6 +235,10 @@ int registration() {
 // main menu
 int main_menu() {  
     WINDOW *main_menu_window = newwin (LINES, COLS, 0, 0);
+    
+    // request informing the server that a user is going to exit the program
+    message_t *exit = (message_t *) malloc (sizeof (message_t));
+    exit->type = 0;
     
     wprintw (main_menu_window, "Welcome to ChatPrototype!\n");
     wprintw (main_menu_window, "To find out which command is referred to which action, enter /help\n");
@@ -274,6 +249,7 @@ int main_menu() {
     while (1) {
         if (wgetnstr (main_menu_window, command, LENGTH_COMMAND) == ERR) {  // error in input
             delwin (main_menu_window);
+            free (exit);
             return ERROR_INPUT;
         }
         
@@ -286,18 +262,27 @@ int main_menu() {
             wprintw (main_menu_window, "You returned back to the main menu!\n");
             wprintw (main_menu_window, "To find out which command is referred to which action, enter /help\n");
         }
-        else if (strcmp (command, "/exit") == 0)     // exit the program
+        else if (strcmp (command, "/exit") == 0) {   // exit the program
+            if (send (sock, (void *) exit, sizeof (message_t), 0) == -1) {
+                delwin (main_menu_window);
+                free (exit);
+                return ERROR_CONNECTION;
+            }
             break;
+        }
         else {
             if (strcmp (command, "1") == 0) {   // enter the main chat
                 if ((status = main_chat()) == ERROR_THREAD) {   // error in threads
                     delwin (main_menu_window);
+                    free (exit);
                     return ERROR_THREAD;
                 } else if (status == ERROR_INPUT) {         // error in input
                     delwin (main_menu_window);
+                    free (exit);
                     return ERROR_INPUT;
                 } else if (status == ERROR_CONNECTION) {    // error in connection
                     delwin (main_menu_window);
+                    free (exit);
                     return ERROR_CONNECTION;
                 } else {                                    // without error
                     delwin (main_menu_window);
@@ -309,12 +294,15 @@ int main_menu() {
             else if (strcmp (command, "2") == 0) {  // enter the group chat
                 if ((status = group_chat()) == ERROR_THREAD) {  // error in threads
                     delwin (main_menu_window);
+                    free (exit);
                     return ERROR_THREAD;
                 } else if (status == ERROR_INPUT) {         // error in input
                     delwin (main_menu_window);
+                    free (exit);
                     return ERROR_INPUT;
                 } else if (status == ERROR_CONNECTION) {    // error in connection
                     delwin (main_menu_window);
+                    free (exit);
                     return ERROR_CONNECTION;
                 } else {                                    // without error
                     delwin (main_menu_window);
@@ -326,9 +314,11 @@ int main_menu() {
             else if (strcmp (command, "3") == 0)    // creating a new group
                 if ((status = create_group()) == ERROR_INPUT) { // error in input
                     delwin (main_menu_window);
+                    free (exit);
                     return ERROR_INPUT;
                 } else if (status == ERROR_CONNECTION) {        // error in connection
                     delwin (main_menu_window);
+                    free (exit);
                     return ERROR_CONNECTION;
                 } else {                                        // without error
                     delwin (main_menu_window);
@@ -342,6 +332,7 @@ int main_menu() {
                     return -2;
                 } else if (status == ERROR_CONNECTION) {        // error in connection
                     delwin (main_menu_window);
+                    free (exit);
                     return -1;
                 } else {                                        // without error
                     delwin (main_menu_window);
@@ -358,7 +349,7 @@ int main_menu() {
     }
     
     delwin (main_menu_window);
-    
+    free (exit);
     return 0;
 }
 

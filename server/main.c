@@ -162,18 +162,15 @@ int main()
 
 int exit_flag = 0;
 int server_sock;
-struct sockaddr_in server_addr;
-int threads_number = 0;
+struct sockaddr_in client_info;
+int requests_number = 0;
 xmlDocPtr doc = NULL;
-client_list *now = NULL;
+client_list *last_client = NULL;
 
 int main (void) {
-/*
-    Dont forget to refactor!!!
-*/
     FILE *db;
     if ((db = fopen (DATABASE, "r")) == NULL) {
-            printf ("database.xml doesn't exists! It will be created right now.\n");
+            printf ("File database.xml doesn't exists! It will be created right now.\n");
             db = fopen (DATABASE, "w");
             fputs ("<?xml version=\"1.0\"?>\n", db);
             fputs ("<database>\n", db);
@@ -185,8 +182,10 @@ int main (void) {
             fputs ("\t</main_chat>\n", db);
             fputs ("</database>\n", db);
     } else
-            printf ("database.xml exists!\n");
+            printf ("File database.xml already exists!\n");
     fclose (db);
+    
+    printf ("To close the server, enter /exit\n");
     
     // create a server socket
     if ((server_sock = socket (AF_INET, SOCK_STREAM, 0)) == -1) {
@@ -194,14 +193,14 @@ int main (void) {
     }
     
     // fill information about the server address
-    memset ((char *) &server_addr, '\0', sizeof (server_addr));
-    server_addr.sin_family = PF_INET;
-    server_addr.sin_addr.s_addr = inet_addr ("127.0.0.1");
-    server_addr.sin_port = htons (8888);
+    memset ((char *) &client_info, '\0', sizeof (client_info));
+    client_info.sin_family = PF_INET;
+    client_info.sin_addr.s_addr = inet_addr ("127.0.0.1");
+    client_info.sin_port = htons (8888);
     
     // bind address to a socket
-    int server_addr_len = sizeof (server_addr);
-    bind (server_sock, (struct sockaddr*) &server_addr, server_addr_len);
+    int server_addr_len = sizeof (client_info);
+    bind (server_sock, (struct sockaddr*) &client_info, server_addr_len);
     // listen by a socket
     listen (server_sock, 5);
     
@@ -212,7 +211,6 @@ int main (void) {
         exit_flag = 1;
     } else {
         // create a thread for connecting of clients
-        printf ("Connecting to a user...\n");
         pthread_t client_connecting_thread_id;
         if (pthread_create (&client_connecting_thread_id, NULL, (void *) client_connecting_handler, NULL) != 0) {
             printf ("\r%s", MSG_ERROR_THREADS);
@@ -222,7 +220,7 @@ int main (void) {
     
     while (exit_flag != 1) {}
     
-    while (threads_number > 1) {}
+    while (requests_number > 0) {}
     
     return (EXIT_SUCCESS);
 }

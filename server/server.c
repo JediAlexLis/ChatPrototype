@@ -1,16 +1,16 @@
+#include <stdbool.h>
+
 #include "server.h"
 
 int server_sock;
-struct sockaddr_in server_addr;
-int threads_number;
-client_list *now;
+struct sockaddr_in client_info;
+int requests_number;
+client_list *last_client;
 int exit_flag;
 xmlDocPtr doc;
 
 // handler for entering commands
 void command_handler () {
-    threads_number++;
-    
     char command[LENGTH_COMMAND] = {};
     
     while (exit_flag != 1) {
@@ -25,59 +25,77 @@ void command_handler () {
             break;
         }
     }
-    
-    threads_number--;
 }
 // handler for connecting of clients
 void client_connecting_handler () {
     int client_sock;
-    int server_addr_len = sizeof (server_addr);
+    struct sockaddr_in client_info;
+    int client_info_len = sizeof (client_info);
+    
     while (1) {
         // get a client socket
-        if ((client_sock = accept (server_sock, (struct sockaddr*) &server_addr, (socklen_t*) &server_addr_len)) == -1) {
-            return (EXIT_FAILURE);
+        if ((client_sock = accept (server_sock, (struct sockaddr*) &client_info, (socklen_t*) &client_info_len)) == -1) {
+            printf ("%s", MSG_ERROR_CONNECTION);
+            return;
         }
-        
-        printf ("%d\n", client_sock);
+        printf ("Client %s is accepted!\n", inet_ntoa(client_info.sin_addr));
         
         // Append linked list for clients
-/*
-        client_list *c = new_node (client_sock);
-        c->prev = now;
-        now->next = c;
-        now = c;
-*/
+        client_list *c = new_node (client_sock, inet_ntoa(client_info.sin_addr));
+        if (last_client != NULL) {
+            c->prev = last_client;
+            last_client->next = c;
+        }
+        last_client = c;
         
+        printf ("Creating of a thread for %s...\n", c->ip);
         // run a thread for processing of client requests
         pthread_t id;
-        if (pthread_create (&id, NULL, (void *) client_requests_handler, (void *) &client_sock) != 0) {
-            return (EXIT_FAILURE);
+        if (pthread_create (&id, NULL, (void *) client_requests_handler, (void *) c) != 0) {
+            printf ("%s", MSG_ERROR_THREADS);
+            return;
         }
+        printf ("Thread for %s is created!\n", c->ip);
     }
 }
 // handler for processing of requests
-void client_requests_handler (void *client_sock) {
-    threads_number++;
-    client_list *np = (client_list *) client_sock;
-    message_t message, response;
+void client_requests_handler (void *client) {
+    client_list *np = (client_list *) client;
+    message_t *request, *response;
+    request = (message_t *) malloc (sizeof (message_t));
     
     // Conversation
     while (exit_flag != 1) {
-        memset ((char *) &message, '\0', sizeof (message));
-        memset ((char *) &response, '\0', sizeof (response));
-        
-        if (recv (np->socket_id, (void *) &message, sizeof (message), 0) == -1) {
-            printf ("\r%s", MSG_ERROR_THREADS);
+        memset ((char *) request, '\0', sizeof (message_t));
+
+        if (recv (np->socket_fd, (void *) request, sizeof (message_t), 0) == -1) {
+            printf ("\r%s", MSG_ERROR_CONNECTION);
             exit_flag = 1;
+            continue;
+        }
+        requests_number++;
+        
+        printf ("Request from %s/%s is received!\n", np->name, np->ip);
+
+        if (!request->type) {    // type == 0 - user wants to disconnect from the server and exit the program
+            requests_number--;
             break;
         }
-        
-        switch (message.type) {
-            case (0) :
-                response = login_request (message.buffer);
-                break;
+        // recognizing of a request
+        switch (request->type) {
             case (1) :
-                response = register_request (message.buffer);
+                if ((response = login_request (request->buffer, np)) == NULL) {
+                    requests_number--;
+                    exit_flag = 1;
+                    continue;
+                }
+                break;
+            case (2) :
+                if ((response = register_request (request->buffer)) == NULL) {
+                    requests_number--;
+                    exit_flag = 1;
+                    continue;
+                }
                 break;
 /*
             case (2) :
@@ -105,30 +123,44 @@ void client_requests_handler (void *client_sock) {
                 quit_group_request (message.buffer);
 */
         }
-        
-        send (np->socket_id, (void *) &response, sizeof (response), 0);
+        printf ("Sending of a response to %s/%s...\n", np->name, np->ip);
+        if (send (np->socket_fd, (void *) response, sizeof (message_t), 0) == -1) {
+            printf ("\r%s", MSG_ERROR_CONNECTION);
+            exit_flag = 1;
+        } else
+            printf ("Response to %s/%s is sent!\n", np->name, np->ip);
+        requests_number--;
     }
 
     // Remove Node
-    close(np->socket_id);
-    if (np == now) { // remove an edge node
-        now = np->prev;
-        now->next = NULL;
-    } else { // remove a middle node
-        np->prev->next = np->next;
+    close(np->socket_fd);
+    printf ("%s/%s is disconnected from the server\n", np->name, np->ip);
+    if (np == last_client) {        // remove a last node
+        if (np->prev != NULL) { // check if it's not the first node
+            last_client = np->prev;
+            last_client->next = NULL;
+        }
+    } else {                        // otherwise
+        if (np->prev != NULL)   // check if it's not the first node
+            np->prev->next = np->next;
         np->next->prev = np->prev;
     }
+
     free(np);
-    
-    threads_number--;
 }
 
-message_t login_request (char *message) {
-    message_t response;
-    memset (response.buffer, '\0', LENGTH_BUFFER);
+// processor of the request to log in
+message_t* login_request (char *message, client_list *np) {
+    // variable for response to a client
+    message_t *response = (message_t *) malloc (sizeof (message_t));
+    memset (response->buffer, '\0', LENGTH_BUFFER);
     
-    char nickname[LENGTH_NICKNAME];
-    char password[LENGTH_PASSWORD];
+    // variables for nickname and password
+    char *nickname = (char *) malloc (LENGTH_NICKNAME * sizeof (char));
+    char *password = (char *) malloc (LENGTH_PASSWORD * sizeof (char));
+    
+    // variable which responds to whether the user with the specific nickname is found in the database
+    uint8_t isFound = 0;
     
     memset (nickname, '\0', LENGTH_NICKNAME);
     memset (password, '\0', LENGTH_PASSWORD);
@@ -136,48 +168,80 @@ message_t login_request (char *message) {
     strncpy (nickname, message, LENGTH_NICKNAME);
     strncpy (password, message + (LENGTH_NICKNAME + 1), LENGTH_PASSWORD);
     
-    
-    
+    // parsing XML file
     while (doc != NULL) {}
-    doc = xmlParseFile (DATABASE);
+    if ((doc = xmlParseFile (DATABASE)) == NULL) {
+        printf ("%s", MSG_ERROR_WORK_XML);
+        free (nickname);
+        free (password);
+        xmlFreeDoc(doc);
+        return NULL;
+    }
     xmlNodePtr cur = xmlDocGetRootElement (doc);
     
+    // finding a <users> tag in XML
     cur = cur->children;
     while (xmlStrcmp (cur->name, (xmlChar *) "users") != 0)
         cur = cur->next;
     
-    xmlChar *nick;
-    xmlChar *pass;
+    // finding a <user> node with specific attributes of a nickname and a password
+    xmlChar *nick, *pass;
     cur = cur->children;
     while (cur != NULL) {
+        if (xmlStrcmp (cur->name, (xmlChar *) "text") == 0) {
+            cur = cur->next;
+            continue;
+        }
         nick = xmlGetProp (cur, "nickname");
         pass = xmlGetProp (cur, "password");
-        if (xmlStrcmp (nick, (xmlChar *) nickname) == 0 && xmlStrcmp (pass, (xmlChar *) password) != 0) {
-            response.type = 1;  // not good
-            strncpy (response.buffer, "Not OK", strlen ("Not OK"));
-            break;
-        } else if (xmlStrcmp (nick, (xmlChar *) nickname) == 0 && xmlStrcmp (pass, (xmlChar *) password) == 0) {
-            response.type = 0;   // good
-            strncpy (response.buffer, "OK", strlen ("OK"));
-            break;
+        if (nick == NULL || pass == NULL) {
+            printf ("%s", MSG_ERROR_WORK_XML);
+            free (nickname);
+            free (password);
+            xmlFreeDoc(doc);
+            doc = NULL;
+            return NULL;
         }
+        if (xmlStrcmp (nick, (xmlChar *) nickname) == 0) {
+            if (xmlStrcmp (pass, (xmlChar *) password) != 0) {  // if nickname is found, but password isn't correct
+                response->type = 1;  // unsuccessful logging
+                strncpy (response->buffer, "Username/password is not correct!", strlen ("Username/password is not correct!"));
+                isFound = 1;
+                break;
+            } else {                                            // otherwise
+                response->type = 0;   // successful logging
+                strncpy (response->buffer, "OK", strlen ("OK"));
+                strncpy (np->name, nickname, strlen (nickname));
+                printf ("%s from %s is logged in\n", nickname, np->ip);
+                isFound = 1;
+                break;
+            }
+        }
+        
+        cur = cur->next;
+    }
+
+    if (isFound == 0) {
+        response->type = 1;  // unsuccessful logging
+        strncpy (response->buffer, "User with such nickname is not found!", strlen ("User with such nickname is not found!"));
     }
     
-    
-    
+    free (nickname);
+    free (password);
     xmlFreeDoc(doc);
+    doc = NULL;
     
-    printf ("%s\n", nickname);
-    printf ("%s\n", password);
-    
-    return response;   // not found
+    return response;
 }
-message_t register_request (char *message) {
-    message_t response;
-    memset (response.buffer, '\0', LENGTH_BUFFER);
+// processor of the request to register
+message_t* register_request (char *message) {
+    // variable for response to a client
+    message_t *response = (message_t *) malloc (sizeof (message_t));
+    memset (response->buffer, '\0', LENGTH_BUFFER);
     
-    char nickname[LENGTH_NICKNAME];
-    char password[LENGTH_PASSWORD];
+    // variables for nickname and password
+    char *nickname = (char *) malloc (LENGTH_NICKNAME * sizeof (char));
+    char *password = (char *) malloc (LENGTH_PASSWORD * sizeof (char));
     
     memset (nickname, '\0', LENGTH_NICKNAME);
     memset (password, '\0', LENGTH_PASSWORD);
@@ -185,35 +249,102 @@ message_t register_request (char *message) {
     strncpy (nickname, message, LENGTH_NICKNAME);
     strncpy (password, message + (LENGTH_NICKNAME + 1), LENGTH_PASSWORD);
     
-    
+    // parsing XML file
     while (doc != NULL) {}
-    doc = xmlParseFile (DATABASE);
+    if ((doc = xmlParseFile (DATABASE)) == NULL) {
+        printf ("%s", MSG_ERROR_WORK_XML);
+        xmlSaveFormatFile (DATABASE, doc, 1);
+        xmlFreeDoc(doc);
+        free (nickname);
+        free (password);
+        return NULL;
+    }
     xmlNodePtr cur = xmlDocGetRootElement (doc);
     
+    // finding a <users> tag in XML
     cur = cur->children;
     while (xmlStrcmp (cur->name, (xmlChar *) "users") != 0)
         cur = cur->next;
     
-    printf ("%s\n", (char *) cur->name);
+    // finding a <user> node with the same attributes of a nickname and a password
+    xmlChar *nick, *pass;
+    xmlNodePtr ptr = cur->children;
+    while (ptr != NULL) {
+        if (xmlStrcmp (ptr->name, (xmlChar *) "text") == 0) {
+            ptr = ptr->next;
+            continue;
+        }
+        nick = xmlGetProp (ptr, "nickname");
+        pass = xmlGetProp (ptr, "password");
+        if (nick == NULL || pass == NULL) {
+            printf ("%s", MSG_ERROR_WORK_XML);
+            free (nickname);
+            free (password);
+            xmlFreeDoc(doc);
+            doc = NULL;
+            return NULL;
+        }
+        if (xmlStrcmp (nick, (xmlChar *) nickname) == 0) {      // if the same nickname is found
+            response->type = 1;  // unsuccessful logging
+            strncpy (response->buffer, "User with such nickname already exists", strlen ("User with such nickname already exists"));
+            break;
+        }
+        
+        ptr = ptr->next;
+    }
     
-    cur = cur->children;
-    xmlNodePtr newnode = xmlNewTextChild (cur, NULL, "user", NULL);
-    xmlNewProp (newnode, "nickname", nickname);
-    xmlNewProp (newnode, "password", password);
-    
-    response.type = 0;   // good
-    strncpy (response.buffer, "OK", strlen ("OK"));
-    
-    
-    
+    // adding a new <user> node with the specific attributes
+    xmlNodePtr newnode;
+    if (ptr == NULL) {
+        if ((newnode = xmlNewTextChild (cur, NULL, "user", NULL)) == NULL) {
+            printf ("%s", MSG_ERROR_WORK_XML);
+            xmlSaveFormatFile (DATABASE, doc, 1);
+            xmlFreeDoc(doc);
+            free (nickname);
+            free (password);
+            doc = NULL;
+            return NULL;
+        }
+        if (xmlNewProp (newnode, "nickname", nickname) == NULL) {
+            printf ("%s", MSG_ERROR_WORK_XML);
+            xmlSaveFormatFile (DATABASE, doc, 1);
+            xmlFreeDoc(doc);
+            free (nickname);
+            free (password);
+            doc = NULL;
+            return NULL;
+        }
+        if (xmlNewProp (newnode, "password", password) == NULL) {
+            printf ("%s", MSG_ERROR_WORK_XML);
+            xmlSaveFormatFile (DATABASE, doc, 1);
+            xmlFreeDoc(doc);
+            free (nickname);
+            free (password);
+            doc = NULL;
+            return NULL;
+        }
+        if (xmlNewProp (newnode, "banned", "false") == NULL) {
+            printf ("%s", MSG_ERROR_WORK_XML);
+            xmlSaveFormatFile (DATABASE, doc, 1);
+            xmlFreeDoc(doc);
+            free (nickname);
+            free (password);
+            doc = NULL;
+            return NULL;
+        }
+
+        response->type = 0;   // successful registration
+        strncpy (response->buffer, "OK", strlen ("OK"));
+        printf ("New user %s is registered\n", nickname);
+    }
     
     xmlSaveFormatFile (DATABASE, doc, 1);
     xmlFreeDoc(doc);
+    free (nickname);
+    free (password);
+    doc = NULL;
 
-    printf ("%s\n", nickname);
-    printf ("%s\n", password);
-    
-    return response;   // not found
+    return response;
 }
 
 
@@ -262,12 +393,15 @@ void write_log (const char *message) {
 }
 */
 //
-client_list *new_node (int sockfd) {
-    client_list *np = (client_list *) malloc ( sizeof (client_list) );
-    np->socket_id = sockfd;
+client_list *new_node (int sockfd, char *ip) {
+    client_list *np = (client_list *) malloc (sizeof (client_list));
+    np->socket_fd = sockfd;
     np->prev = NULL;
     np->next = NULL;
-    //strncpy(np->name, "NULL", 4);
+    memset (np->name, '\0', sizeof (np->name));
+    memset (np->ip, '\0', sizeof (np->ip));
+    strncpy (np->ip, ip, strlen (ip));
+
     return np;
 }
 

@@ -20,7 +20,7 @@ int main (void) {
     refresh();
     
     while ((connect_status = connect_server()) != 0) { // == 0 means it connected successful
-        printf (MSG_ERR_CONNECTION);
+        printf (MSG_ERROR_CONNECTION);
         printf (MSG_ENTER_WHEN_ERR_CONNECTION);
         
         // choosing an action

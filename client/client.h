@@ -29,12 +29,13 @@
 #define ERROR_THREAD -3
 #define ERROR_INPUT -2
 #define ERROR_CONNECTION -1
+#define CANCEL 0
 
 #define TYPE_CHAT_RECEIVE (uint8_t) 1
 #define TYPE_CHAT_SEND (uint8_t) 2
 
 #define MSG_CONNECTING "Connecting to the server...\n"
-#define MSG_ERR_CONNECTION "It's unable to connect to the server!\n"
+#define MSG_ERROR_CONNECTION "It's unable to connect to the server!\n"
 #define MSG_ENTER_WHEN_ERR_CONNECTION "Choose an option - 1 to try again or 0 to exit: "
 #define MSG_ERROR_ENTER "Error in enter a command! Closing the program!\n"
 #define MSG_ERROR_THREADS "Error in creating of thread! Closing the program!\n"

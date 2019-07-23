@@ -25,7 +25,9 @@
 #define LENGTH_NICKNAME 15
 #define LENGTH_PASSWORD 30
 #define LENGTH_COMMAND 7
-#define MSG_ERROR_THREADS "Error in creating of thread! Press Enter to close program. "
+#define MSG_ERROR_THREADS "Error in creating of thread!\n"
+#define MSG_ERROR_CONNECTION "Error in connection!\n"
+#define MSG_ERROR_WORK_XML "Error in working with XML file!\n"
 #define LENGTH_BUFFER 128
 
 // structure of a message
@@ -35,19 +37,19 @@ typedef struct message_s {
 } message_t;
 
 typedef struct client_node {
-    int socket_id;
+    int socket_fd;
     struct client_node* prev;
     struct client_node* next;
-    char name[15];
-    char password[30];
+    char name[LENGTH_NICKNAME];
+    char ip[16];
     int user_id;
 } client_list;
 
 extern int exit_flag;
 extern int server_sock;
-extern struct sockaddr_in server_addr;
-extern int threads_number;
-extern client_list *now;
+extern struct sockaddr_in client_info;
+extern int requests_number;
+extern client_list *last_client;
 extern xmlDocPtr doc;
 
 // handler for entering commands
@@ -57,8 +59,10 @@ void client_connecting_handler ();
 // handler for processing of requests
 void client_requests_handler (void *client_sock);
 
-message_t login_request (char *);
-message_t register_request (char *);
+// processor of the request to log in
+message_t* login_request (char *, client_list*);
+// processor of the request to register
+message_t* register_request (char *);
 
 //// processing a request for connecting to the main chat
 //void main_chat_request (int);
@@ -80,7 +84,7 @@ message_t register_request (char *);
 //// writing a message to log-file
 //void write_log (const char *message);
 //
-client_list *new_node (int);
+client_list *new_node (int, char *);
 
 void str_overwrite_stdout();
 void trim_string (char * string);
