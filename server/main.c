@@ -13,6 +13,7 @@ struct sockaddr_in client_info;
 int requests_number = 0;
 xmlDocPtr doc = NULL;
 client_list *last_client = NULL;
+client_list *first_client = NULL;
 
 int main (void) {
     FILE *db;
@@ -27,6 +28,8 @@ int main (void) {
             fputs ("\t</groups>\n", db);
             fputs ("\t<main_chat>\n", db);
             fputs ("\t</main_chat>\n", db);
+            fputs ("\t<individual_chat>\n", db);
+            fputs ("\t</individual_chat>\n", db);
             fputs ("</database>\n", db);
     } else
             printf ("File database.xml already exists!\n");

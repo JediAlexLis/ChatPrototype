@@ -20,15 +20,21 @@
 #include <limits.h>
 #include <libxml/xmlmemory.h>
 #include <libxml/parser.h>
+#include <sys/sendfile.h>
 
 #define DATABASE "database.xml"
 #define LENGTH_NICKNAME 15
 #define LENGTH_PASSWORD 30
+#define LENGTH_CHAT_MESSAGE 100
 #define LENGTH_COMMAND 7
+
 #define MSG_ERROR_THREADS "Error in creating of thread!\n"
 #define MSG_ERROR_CONNECTION "Error in connection!\n"
 #define MSG_ERROR_WORK_XML "Error in working with XML file!\n"
+
 #define LENGTH_BUFFER 128
+
+#define RESPONSE_CHAT_MESSAGE 7
 
 // structure of a message
 typedef struct message_s {
@@ -50,6 +56,7 @@ extern int server_sock;
 extern struct sockaddr_in client_info;
 extern int requests_number;
 extern client_list *last_client;
+extern client_list *first_client;
 extern xmlDocPtr doc;
 
 // handler for entering commands
@@ -57,23 +64,23 @@ void command_handler ();
 // handler for connecting of clients
 void client_connecting_handler ();
 // handler for processing of requests
-void client_requests_handler (void *client_sock);
+void client_requests_handler (void *);
 
 // processor of the request to log in
 message_t* login_request (char *, client_list*);
 // processor of the request to register
 message_t* register_request (char *);
 
-//// processing a request for connecting to the main chat
-//void main_chat_request (int);
+// processing a request for connecting to the main chat
+message_t* main_chat_request (client_list*);
 //// processing a request for connecting to a group chat
 //void group_chat_request (int);
 //// processing a request for sending a message
-//void send_message_request (char *);
+message_t* send_message_request (client_list*, char *);
 //// processing a request for sending a file
 //void send_file_request ();
-//// processing a request for changing a message
-//void change_message_request (int);
+// processing a request for changing a message
+message_t* change_message_request (client_list *, char *);
 //// processing a request for creating a group
 //void create_group_request ();
 //// processing a request for inviting a new member to a group

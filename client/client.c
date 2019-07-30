@@ -3,7 +3,15 @@
 #include "client.h"
 
 int sock;
-char command[LENGTH_COMMAND];
+char command[LENGTH_CHAT_MESSAGE];
+char username[LENGTH_NICKNAME];
+chat_message_t *chat_messages_list;
+chat_message_t *last;
+int exit_from_chat;
+int client_message_count;
+
+pthread_t send_request_thread;
+pthread_t recv_response_thread;
 
 // trimming \n
 void trim_string (char * string) {
@@ -158,6 +166,7 @@ int login() {
         wrefresh (login_window);
     }
     
+    strncpy (username, nickname, strlen (nickname));
     free (nickname);
     free (password);
     free (message);
@@ -357,38 +366,108 @@ int main_menu() {
 int main_chat() {
     WINDOW *main_chat_window = newwin (LINES, COLS, 0, 0);
     
-    wprintw (main_chat_window, "0 - successfully, -1 - disconnection, -2 - error in input: ");
+    wprintw (main_chat_window, "*** To find out which command is referred to which action, enter /help ***\n");
+    
+    exit_from_chat = 0;
+    
+    // chat message structure
+    struct chat_message_s {
+        char name[LENGTH_NICKNAME];
+        char message[LENGTH_CHAT_MESSAGE];
+        char id[6];
+    } chat_message;
+    
+    // sending a request
+    message_t request;
+    memset ((char *) &request, '\0', sizeof (message_t));
+    request.type = 3;
+    send (sock, (void *) &request, sizeof (message_t), 0);
+    
+    // creating a file
+    int result = 1;
+    //FILE *chat = fopen ("chat.txt", "w");
+    
+    // receiving messages from the main chat
+    chat_message_t *node;
+    while (1) {
+        recv (sock, (void *) &chat_message, sizeof (chat_message), 0);
+        if (strcmp (chat_message.message, "/all") == 0) {
+            //wprintw (main_chat_window, "All!\n");
+            break;
+        }
+        
+        if (strcmp (chat_message.name, username) == 0) {
+            wprintw (main_chat_window, "%s\n", chat_message.message);
+            
+            // adding a new element to the list
+            node = (chat_message_t *) malloc (sizeof (chat_message_t));
+            node->number = client_message_count++;
+            strncpy (node->id, chat_message.id, 6);
+            strncpy (node->message, chat_message.message, strlen (chat_message.message));
+            strncpy (node->sender, chat_message.name, strlen (chat_message.name));
+            node->next = node->prev = NULL;
+            add_new_node (node);
+        }
+        else
+            wprintw (main_chat_window, "%s: %s\n", chat_message.name, chat_message.message);
+        
+        //fprintf (chat, "%s: %s\n", chat_message.name, chat_message.message);
+    }
     wrefresh (main_chat_window);
     
-    int result;
-    wscanw (main_chat_window, "%d", &result);
+    // closing a file descriptor
+    //fclose (chat);
     
-    /*
-    int send_request_status = 0, recv_response_status = 0;
     
-    pthread_t send_request_thread;
-    if (pthread_create(&send_request_thread, NULL, &send_request, &send_request_status) != 0) {
+    if (pthread_create(&send_request_thread, NULL, (void *) send_request, (void *) main_chat_window) != 0) {
         return ERROR_THREAD;
     }
 
-    pthread_t recv_response_thread;
-    if (pthread_create(&recv_response_thread, NULL, &recv_response, &recv_response_status) != 0) {
+    if (pthread_create(&recv_response_thread, NULL, (void *) recv_response, (void *) main_chat_window) != 0) {
         return ERROR_THREAD;
     }
     
-    while (1) {
-        if (send_request_status == ERROR_INPUT) {
-            delwin (main_chat_window);
-            return ERROR_INPUT;
-        } else if (send_request_status == ERROR_CONNECTION || recv_response_status == ERROR_CONNECTION) {
-            delwin (main_chat_window);
-            return ERROR_CONNECTION;
-        }
-        
-    delwin (main_chat_window);
+    //wprintw (main_chat_window, "Before exit...\n");
     
-    return 0;
-    */
+    while (exit_from_chat != 1) {}
+    
+    pthread_cancel (send_request_thread);
+    pthread_cancel (recv_response_thread);
+    
+    //wprintw (main_chat_window, "Before exit...\n");
+    
+    // deleting the list
+    while (last != NULL) {
+        node = last;
+        
+        wprintw (main_chat_window, "***node = last;\n");
+        wrefresh (main_chat_window);
+        
+        last = last->prev;
+        
+        wprintw (main_chat_window, "***last = last->prev;\n");
+        wrefresh (main_chat_window);
+        
+        node->prev = NULL;
+        
+        wprintw (main_chat_window, "***node->prev = NULL;\n");
+        wrefresh (main_chat_window);
+        
+        free (node);
+        
+        wprintw (main_chat_window, "***free (node)\n");
+        wrefresh (main_chat_window);
+        
+        if (last != NULL) {
+            last->next = NULL;
+            
+            wprintw (main_chat_window, "***last->next = NULL;\n");
+            wrefresh (main_chat_window);
+        }
+    }
+    chat_messages_list = NULL;
+    last = NULL;
+    client_message_count = 0;
     
     delwin (main_chat_window);
     return result;
@@ -443,44 +522,174 @@ int quit_group() {
 }
 
 // function for a thread of sending requests
-void* send_request() {
-    WINDOW *send_request_window = newwin (LINES / 4, COLS, LINES * 3 / 4 + 1, 0);
+void send_request(void *window) {
+    pthread_setcancelstate (PTHREAD_CANCEL_ENABLE, NULL);
     
+    message_t request;
     
+    // chat message structure
+    struct chat_message_s {
+        char name[LENGTH_NICKNAME];
+        char message[LENGTH_CHAT_MESSAGE];
+        char id[6];
+    } chat_message;
     
-    delwin (send_request_window);
+    while (exit_from_chat != 1) {
+        memset ((char *) &request, '\0', sizeof (request));
+        memset (command, '\0', LENGTH_CHAT_MESSAGE);
+        
+        wgetnstr ((WINDOW *) window, command, LENGTH_CHAT_MESSAGE);
+        
+        if (strcmp (command, "/change") == 0) {
+            pthread_cancel (recv_response_thread);
+            change_message ();
+            delwin ((WINDOW *) window);
+            
+            window = (void *) newwin (LINES, COLS, 0, 0);
+            
+            wprintw ((WINDOW *) window, "*** To find out which command is referred to which action, enter /help ***\n");
+            
+            // sending a request
+            message_t request;
+            memset ((char *) &request, '\0', sizeof (message_t));
+            request.type = 3;
+            send (sock, (void *) &request, sizeof (message_t), 0);
+
+            // receiving messages from the main chat
+            while (1) {
+                recv (sock, (void *) &chat_message, sizeof (chat_message), 0);
+                if (strcmp (chat_message.message, "/all") == 0) {
+                    break;
+                }
+
+                if (strcmp (chat_message.name, username) == 0)
+                    wprintw (window, "%s\n", chat_message.message);
+                else
+                    wprintw (window, "%s: %s\n", chat_message.name, chat_message.message);
+
+            }
+            wrefresh ((WINDOW *) window);
+            pthread_create(&recv_response_thread, NULL, (void *) recv_response, window);
+        } else if (strcmp (command, "/help") == 0) {
+            pthread_cancel (recv_response_thread);
+            help_main_chat ();
+            delwin ((WINDOW *) window);
+            
+            window = (void *) newwin (LINES, COLS, 0, 0);
+            
+            wprintw ((WINDOW *) window, "*** To find out which command is referred to which action, enter /help ***\n");
+            
+            // sending a request
+            message_t request;
+            memset ((char *) &request, '\0', sizeof (message_t));
+            request.type = 3;
+            send (sock, (void *) &request, sizeof (message_t), 0);
+
+            // receiving messages from the main chat
+            while (1) {
+                recv (sock, (void *) &chat_message, sizeof (chat_message), 0);
+                if (strcmp (chat_message.message, "/all") == 0) {
+                    break;
+                }
+
+                if (strcmp (chat_message.name, username) == 0)
+                    wprintw (window, "%s\n", chat_message.message);
+                else
+                    wprintw (window, "%s: %s\n", chat_message.name, chat_message.message);
+
+            }
+            wrefresh ((WINDOW *) window);
+            pthread_create(&recv_response_thread, NULL, (void *) recv_response, window);
+        } else if (strcmp (command, "/exit") == 0) {   // exit the program
+            request.type = REQUEST_EXIT_MAIN_CHAT;
+            send (sock, (void *) &request, sizeof (message_t), 0);
+            //recv (sock, (void *) &response, sizeof (message_t), 0);
+            exit_from_chat = 1;
+            //continue;
+        } else {
+            request.type = REQUEST_SEND_MESSAGE;
+            strncpy (request.buffer, username, LENGTH_NICKNAME);
+            strncpy (request.buffer + (LENGTH_NICKNAME + 1), command, LENGTH_CHAT_MESSAGE);
+            send (sock, (void *) &request, sizeof (message_t), 0);
+            
+            
+            //recv (sock, (void *) &response, sizeof (message_t), 0);
+        }
+    }
 }
 // function for a thread of receiving responses
-void* recv_response() {
-    WINDOW *recv_response_window = newwin (LINES * 3 / 4, COLS, 0, 0);
-
-    message_t *message = (message_t *) malloc (sizeof (message_t));
+void recv_response(void *window) {
+    pthread_setcancelstate (PTHREAD_CANCEL_ENABLE, NULL);
+    
+    chat_message_t *node;
+    
+    // chat message structure
+    struct chat_message_s {
+        char name[LENGTH_NICKNAME];
+        char message[LENGTH_CHAT_MESSAGE];
+        char id[6];
+    } chat_message;
+    
+    //message_t *message = (message_t *) malloc (sizeof (message_t));
     //message->buffer = (char *) malloc (sizeof (char) * LENGTH_RESPONSE_MESSAGE);
     
-    int result = 0;
+    message_t response;
+    char user[LENGTH_NICKNAME];
+    char message[LENGTH_CHAT_MESSAGE];
     
     while (1) {
-        int recv_status = recv (sock, message, sizeof (message), 0);
-        if (recv_status > 0) {
-            if (message->type == TYPE_CHAT_RECEIVE) {
-                wprintw (recv_response_window, "\r%s\n", message->buffer);
+        memset (user, '\0', LENGTH_NICKNAME);
+        memset (message, '\0', LENGTH_CHAT_MESSAGE);
+        recv (sock, (void *) &response, sizeof (message_t), 0);
+        if (response.type == RESPONSE_CHAT_MESSAGE) {
+            strncpy (user, response.buffer, LENGTH_NICKNAME);
+            strncpy (message, response.buffer + (LENGTH_NICKNAME + 1), LENGTH_CHAT_MESSAGE);
+            wprintw ((WINDOW *) window, "%s: %s\n", user, message);
+            wrefresh ((WINDOW *) window);
+        } else if (response.type == RESPONSE_UPDATE_CHAT) {
+            delwin ((WINDOW *) window);
+            
+            window = (void *) newwin (LINES, COLS, 0, 0);
+            
+            wprintw ((WINDOW *) window, "*** To find out which command is referred to which action, enter /help ***\n");
+            
+            // sending a request
+            message_t request;
+            memset ((char *) &request, '\0', sizeof (message_t));
+            request.type = 3;
+            send (sock, (void *) &request, sizeof (message_t), 0);
+
+            // receiving messages from the main chat
+            while (1) {
+                recv (sock, (void *) &chat_message, sizeof (chat_message), 0);
+                if (strcmp (chat_message.message, "/all") == 0) {
+                    break;
+                }
+
+                if (strcmp (chat_message.name, username) == 0)
+                    wprintw (window, "%s\n", chat_message.message);
+                else
+                    wprintw (window, "%s: %s\n", chat_message.name, chat_message.message);
+
             }
-        } else if (recv_status == -1) {
-            delwin (recv_response_window);
-            result = ERROR_CONNECTION;
-            free (message->buffer);
-            free (message);
-            return &result;
+            wrefresh ((WINDOW *) window);
+        } else if (response.type == RESPONSE_SENT_MESSAGE) {
+            strncpy ((char *) &chat_message, response.buffer, strlen (response.buffer));
+            
+            // adding a new element to the list
+            node = (chat_message_t *) malloc (sizeof (chat_message_t));
+            node->number = client_message_count++;
+            strncpy (node->id, chat_message.id, 6);
+            strncpy (node->message, chat_message.message, strlen (chat_message.message));
+            strncpy (node->sender, chat_message.name, strlen (chat_message.name));
+            node->next = node->prev = NULL;
+            add_new_node (node);
         } else {
-            break;
+            //wprintw ((WINDOW *) window, "\r*** Message is sent! ***\n");
+            //wrefresh ((WINDOW *) window);
         }
     }
     
-    free (message->buffer);
-    free (message);
-    
-    delwin (recv_response_window);
-    return &result;
 }
 
 // sending a message
@@ -493,7 +702,53 @@ void send_file() {
 }
 // changing a message
 void change_message() {
+    WINDOW *change_message_window = newwin (LINES, COLS, 0, 0);
     
+    chat_message_t *ptr = chat_messages_list;
+    int choice;
+    int max = 0;
+    
+    char new_message[LENGTH_CHAT_MESSAGE];
+    
+    message_t request, response;
+    memset ((char *) &request, '\0', sizeof (message_t));
+    memset ((char *) &response, '\0', sizeof (message_t));
+    memset (new_message, '\0', LENGTH_CHAT_MESSAGE);
+    
+    if (ptr == NULL) {
+        wprintw (change_message_window, "You haven't written any your message yet\nPress any key to return... ");
+        wrefresh (change_message_window);
+        noecho();
+        getch();
+        echo();
+    } else {
+        while (ptr != NULL) {
+            wprintw (change_message_window, "%d. %s\n", ptr->number, ptr->message);
+            max = ptr->number;
+            ptr = ptr->next;
+        }
+        wprintw (change_message_window, "\nEnter a number of a message you want to change: ");
+        wrefresh (change_message_window);
+        wscanw (change_message_window, "%d", &choice);
+        
+        wprintw (change_message_window, "Enter new message: ");
+        wgetnstr (change_message_window, new_message, LENGTH_CHAT_MESSAGE);
+        
+        ptr = chat_messages_list;
+        while (ptr->number != choice) {
+            ptr = ptr->next;
+        }
+        
+        request.type = 5;
+        strncpy (request.buffer, ptr->id, strlen (ptr->id));
+        strncpy (request.buffer + (strlen (ptr->id) + 1), new_message, strlen (new_message));
+        send (sock, (void *) &request, sizeof (message_t), 0);
+        recv (sock, (void *) &response, sizeof (message_t), 0);
+        
+        strncpy (ptr->message, new_message, strlen (new_message));
+    }
+    
+    delwin (change_message_window);
 }
 // deleting a message
 void delete_message() {
@@ -530,7 +785,18 @@ void help_main_menu() {
 }
 // calling help for a main chat
 void help_main_chat() {
+    WINDOW *help_main_chat_window = newwin (LINES, COLS, 0, 0);
     
+    wprintw (help_main_chat_window, "\tTo send a message, write it and press Enter\n");
+    wprintw (help_main_chat_window, "\tTo exit the chat, write /exit and press Enter\n");
+    wprintw (help_main_chat_window, "Press any key to return back...");
+    
+    wrefresh (help_main_chat_window);
+    noecho();
+    getch();
+    echo();
+    
+    delwin (help_main_chat_window);
 }
 // calling help for a group chat
 void help_group_chat() {
@@ -559,4 +825,15 @@ void help_invite_member() {
 // calling help for choosing an object of an action
 void help_choose() {
     
+}
+
+void add_new_node (chat_message_t *node) {
+    if (chat_messages_list == NULL) {
+        chat_messages_list = node;
+        last = node;
+    } else {
+        node->prev = last;
+        last->next = node;
+        last = node;
+    }
 }

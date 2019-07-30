@@ -8,12 +8,20 @@
 #include "client.h"
 
 int sock;
-char command[LENGTH_COMMAND] = {};
+char command[LENGTH_CHAT_MESSAGE] = {};
+char username[LENGTH_NICKNAME] = {};
+chat_message_t *chat_messages_list = NULL;
+chat_message_t *last = NULL;
+int exit_from_chat = 0;
+pthread_t send_request_thread;
+pthread_t recv_response_thread;
+int client_message_count = 0;
 
 // entrance to the program
 int main (void) {
     
     int connect_status;
+    //memset (username, '\0', LENGTH_NICKNAME);
     
     // connecting to server
     printf (MSG_CONNECTING);

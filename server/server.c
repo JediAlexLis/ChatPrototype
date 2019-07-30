@@ -6,6 +6,7 @@ int server_sock;
 struct sockaddr_in client_info;
 int requests_number;
 client_list *last_client;
+client_list *first_client;
 int exit_flag;
 xmlDocPtr doc;
 
@@ -45,7 +46,8 @@ void client_connecting_handler () {
         if (last_client != NULL) {
             c->prev = last_client;
             last_client->next = c;
-        }
+        } else
+            first_client = c;
         last_client = c;
         
         printf ("Creating of a thread for %s...\n", c->ip);
@@ -83,25 +85,48 @@ void client_requests_handler (void *client) {
         }
         // recognizing of a request
         switch (request->type) {
-            case (1) :
+            case (1) : // to log in
+                printf ("\tIt's a request to login\n");
                 if ((response = login_request (request->buffer, np)) == NULL) {
                     requests_number--;
                     exit_flag = 1;
                     continue;
                 }
                 break;
-            case (2) :
+            case (2) :  // to register
+                printf ("\tIt's a request to register\n");
                 if ((response = register_request (request->buffer)) == NULL) {
                     requests_number--;
                     exit_flag = 1;
                     continue;
                 }
                 break;
-/*
-            case (2) :
-                main_chat_request (message.buffer);
+            case (3) :  // to join the main chat
+                printf ("\tIt's a request to join the main chat\n");
+                if ((response = main_chat_request (np)) == NULL) {
+                    requests_number--;
+                    exit_flag = 1;
+                    continue;
+                }
                 break;
-            case (3) :
+            case (4) :  // to send a message into the main chat
+                printf ("\tIt's a request to send a message into the main chat\n");
+                if ((response = send_message_request (np, request->buffer)) == NULL) {
+                    requests_number--;
+                    exit_flag = 1;
+                    continue;
+                }
+                break;
+            case (5) :  // to change a message from the main chat
+                printf ("\tIt's a request to change a message from the main chat\n");
+                if ((response = change_message_request (np, request->buffer)) == NULL) {
+                    requests_number--;
+                    exit_flag = 1;
+                    continue;
+                }
+                break;
+/*
+                case (3) :
                 group_chat_request (message.buffer);
                 break;
             case (4) :
@@ -131,7 +156,7 @@ void client_requests_handler (void *client) {
             printf ("Response to %s/%s is sent!\n", np->name, np->ip);
         requests_number--;
     }
-
+    
     // Remove Node
     close(np->socket_fd);
     printf ("%s/%s is disconnected from the server\n", np->name, np->ip);
@@ -350,21 +375,91 @@ message_t* register_request (char *message) {
 
 
 // processing a request for connecting to the main chat
-//void main_chat_request (int user_id) {
+message_t* main_chat_request (client_list *np) {
     /*
      * 1. open XML-file
      * 2. find a tag <main_chat>
      * 3. send to a client the data between <main_chat> and </main_chat> by string after string
      * 4. send to a client the result of the procedure
-     * 5. add client id to the list of online-in-chat users
-     */
-//}
+     * 5. add client id to the list of online-in-chat users */
+    
+    // chat message structure
+    struct chat_message_s {
+        char name[LENGTH_NICKNAME];
+        char text[LENGTH_CHAT_MESSAGE];
+        char id[6];
+    } chat_message;
+    
+    // parsing XML file
+    while (doc != NULL) {}
+    if ((doc = xmlParseFile (DATABASE)) == NULL) {
+        printf ("%s", MSG_ERROR_WORK_XML);
+        xmlSaveFormatFile (DATABASE, doc, 1);
+        xmlFreeDoc(doc);
+        return NULL;
+    }
+    xmlNodePtr cur = xmlDocGetRootElement (doc);
+    
+    printf ("\t\tFile is parsed!\n");
+    
+    // finding a <main_chat> tag in XML
+    cur = cur->children;
+    while (xmlStrcmp (cur->name, (xmlChar *) "main_chat") != 0)
+        cur = cur->next;
+    
+    printf ("\t\tTag is found!\n");
+    
+    // finding a <message> node
+    cur = cur->children;
+    while (cur != NULL) {
+        if (xmlStrcmp (cur->name, (xmlChar *) "text") == 0) {
+            cur = cur->next;
+            continue;
+        }
+        memset ((char *) &chat_message, '\0', sizeof (chat_message));
+        strncpy (chat_message.name, (char *) xmlGetProp (cur, "name"), strlen ((char *) xmlGetProp (cur, "name")));
+        strncpy (chat_message.text, (char *) xmlGetProp (cur, "text"), strlen ((char *) xmlGetProp (cur, "text")));
+        strncpy (chat_message.id, ((char *) xmlGetProp (cur, "id")), strlen ((char *) xmlGetProp (cur, "id")));
+        
+        //printf ("%s: %s\n", (char *) xmlGetProp (cur, "name"), (char *) xmlGetProp (cur, "message"));
+        //printf ("Length of name: %d\tLength of message: %d\n", strlen((char *) xmlGetProp (cur, "name")), strlen ((char *) xmlGetProp (cur, "message")));
+        
+/*
+        if (strlen (chat_message.name) == 0 || strlen (chat_message.name) == 0) {
+            printf ("%s", MSG_ERROR_WORK_XML);
+            xmlFreeDoc(doc);
+            remove ("tmp.txt");
+            doc = NULL;
+            return NULL;
+        }
+*/
+        //size += write (tmp, (void *) chat_message, sizeof (chat_message));
+        send (np->socket_fd, (void *) &chat_message, sizeof (chat_message), 0);
+        printf ("\t\tA message (%s) from the chat is sent to %s/%s\n", chat_message.text, np->name, np->ip);
+        
+        cur = cur->next;
+    }
+    memset ((char *) &chat_message, '\0', sizeof (chat_message));
+    strncpy (chat_message.text, "/all", strlen ("/all"));
+    send (np->socket_fd, (void *) &chat_message, sizeof (chat_message), 0);
+    
+    printf ("\t\t/all is sent to %s/%s\n", np->name, np->ip);
+    
+    xmlFreeDoc (doc);
+    doc = NULL;
+    
+    message_t *new_response = (message_t *) malloc (sizeof (message_t));
+    new_response->type = 100;
+    
+    return new_response;
+}
+
 // processing a request for connecting to a group chat
 //void group_chat_request (int user_id) {
     
 //}
 // processing a request for sending a message
-//void send_message_request (char *message) {
+message_t* send_message_request (client_list *np, char * buffer) {
     /*
      * 1. open XML-file
      * 2. find a tag <main_chat>
@@ -372,14 +467,180 @@ message_t* register_request (char *message) {
      * 4. send to a sender the result of the procedure
      * 5. send to other clients the message
      */
-//}
+    
+    // chat message structure
+    struct chat_message_s {
+        char name[LENGTH_NICKNAME];
+        char text[LENGTH_CHAT_MESSAGE];
+        char id[6];
+    } chat_message;
+    
+    char username[LENGTH_NICKNAME];
+    char message[LENGTH_CHAT_MESSAGE];
+    
+    memset (username, '\0', LENGTH_NICKNAME);
+    memset (message, '\0', LENGTH_CHAT_MESSAGE);
+    
+    strncpy (username, buffer, LENGTH_NICKNAME);
+    strncpy (message, buffer + (LENGTH_NICKNAME + 1), LENGTH_CHAT_MESSAGE);
+    
+    // parsing XML file
+    while (doc != NULL) {}
+    if ((doc = xmlParseFile (DATABASE)) == NULL) {
+        printf ("%s", MSG_ERROR_WORK_XML);
+        xmlSaveFormatFile (DATABASE, doc, 1);
+        xmlFreeDoc(doc);
+        return NULL;
+    }
+    xmlNodePtr cur = xmlDocGetRootElement (doc);
+    
+    printf ("\t\tFile is parsed!\n");
+    
+    // finding a <main_chat> tag in XML
+    cur = cur->children;
+    while (xmlStrcmp (cur->name, (xmlChar *) "main_chat") != 0)
+        cur = cur->next;
+    
+    printf ("\t\tTag is found!\n");
+    
+    char char_id[6];
+    memset (char_id, '\0', 6);
+    
+    // finding the last ID value among all messages
+    xmlNodePtr ptr = cur->children;
+    while (ptr != NULL) {
+        if (xmlStrcmp (ptr->name, (xmlChar *) "text") == 0) {
+            ptr = ptr->next;
+            continue;
+        }
+        
+        strncpy (char_id, (char *) xmlGetProp (ptr, "id"), strlen ((char *) xmlGetProp (ptr, "id")));
+        
+        ptr = ptr->next;
+    }
+    
+    printf ("\t\tThe last ID is found\n");
+    
+    int id = atoi (char_id);
+    sprintf (char_id, "%d", ++id);
+    
+    xmlNodePtr newnode = xmlNewTextChild (cur, NULL, "message", NULL);
+    xmlNewProp (newnode, "name", username);
+    xmlNewProp (newnode, "text", message);
+    xmlNewProp (newnode, "id", char_id);
+    
+    xmlSaveFormatFile (DATABASE, doc, 1);
+    xmlFreeDoc(doc);
+    doc = NULL;
+    
+    printf ("\t\tNew message is added to the database\n");
+    
+    message_t response;
+    memset ((char *) &response, '\0', sizeof (message_t));
+    response.type = RESPONSE_CHAT_MESSAGE;
+    strncpy (response.buffer, username, LENGTH_NICKNAME);
+    strncpy (response.buffer + (LENGTH_NICKNAME + 1), message, LENGTH_CHAT_MESSAGE);
+    
+    client_list *tmp = first_client;
+    while (tmp != NULL) {
+        if (np->socket_fd != tmp->socket_fd) { // all clients except itself.
+            send(tmp->socket_fd, (void *) &response, sizeof (message_t), 0);
+            printf("\t\tMessage (%s) is sent to %s/%s\n", response.buffer + (LENGTH_NICKNAME + 1), tmp->name, tmp->ip);
+        }
+        tmp = tmp->next;
+    }
+    
+    memset ((char *) &chat_message, '\0', sizeof (chat_message));
+    strncpy (chat_message.name, username, strlen (username));
+    strncpy (chat_message.text, message, strlen (message));
+    strncpy (chat_message.id, char_id, strlen (char_id));
+    
+    message_t *new_response = (message_t *) malloc (sizeof (message_t));
+    memset ((char *) &new_response, '\0', sizeof (message_t));
+    new_response->type = 150;
+    strncpy (new_response->buffer, (char *) &chat_message, sizeof (chat_message));
+    
+    return new_response;
+}
 // processing a request for sending a file
 //void send_file_request () {
     
 //}
-/*
+
 // processing a request for changing a message
-void change_message_request (int);
+message_t* change_message_request (client_list *np, char * buffer) {
+    // parsing XML file
+    while (doc != NULL) {}
+    if ((doc = xmlParseFile (DATABASE)) == NULL) {
+        printf ("%s", MSG_ERROR_WORK_XML);
+        xmlSaveFormatFile (DATABASE, doc, 1);
+        xmlFreeDoc(doc);
+        return NULL;
+    }
+    xmlNodePtr cur = xmlDocGetRootElement (doc);
+    
+    printf ("\t\tFile is parsed!\n");
+    
+    // finding a <main_chat> tag in XML
+    cur = cur->children;
+    while (xmlStrcmp (cur->name, (xmlChar *) "main_chat") != 0)
+        cur = cur->next;
+    
+    printf ("\t\tTag is found!\n");
+    
+    char char_id[6];
+    memset (char_id, '\0', 6);
+    strncpy (char_id, buffer, 6);
+    
+    printf ("\t\tId: %s\n", char_id);
+    
+    // finding the specific ID value among all messages
+    xmlNodePtr ptr = cur->children;
+    while (ptr != NULL) {
+        if (xmlStrcmp (ptr->name, (xmlChar *) "text") == 0) {
+            ptr = ptr->next;
+            continue;
+        }
+        
+        if (xmlStrcmp (xmlGetProp (cur, "id"), (xmlChar *) char_id) == 0)
+            break;
+        
+        ptr = ptr->next;
+    }
+    
+    printf ("\t\tMessage is found\n");
+    
+    char new_message[LENGTH_CHAT_MESSAGE];
+    memset (new_message, '\0', LENGTH_CHAT_MESSAGE);
+    strncpy (new_message, buffer + 7, LENGTH_CHAT_MESSAGE);
+    
+    printf ("\t\tNew message is %s\n", new_message);
+    
+    xmlSetProp (cur, (xmlChar *) "text", (xmlChar *) new_message);
+    
+    xmlSaveFormatFile (DATABASE, doc, 1);
+    xmlFreeDoc(doc);
+    doc = NULL;
+    
+    message_t response;
+    response.type = 50;
+    
+    client_list *tmp = first_client;
+    while (tmp != NULL) {
+        if (np->socket_fd != tmp->socket_fd) { // all clients except itself.
+            send(tmp->socket_fd, (void *) &response, sizeof (message_t), 0);
+            printf("\t\tMessage (%s) is sent to %s/%s\n", response.buffer + (LENGTH_NICKNAME + 1), tmp->name, tmp->ip);
+        }
+        tmp = tmp->next;
+    }
+    
+    
+    message_t *new_response = (message_t *) malloc (sizeof (message_t));
+    new_response->type = 100;
+    
+    return new_response;
+}
+/*
 // processing a request for creating a group
 void create_group_request ();
 // processing a request for inviting a new member to a group
@@ -392,6 +653,23 @@ void write_log (const char *message) {
     
 }
 */
+
+/*
+void send_to_all_clients(client_list *np, char tmp_buffer[]) {
+    client_list *tmp = first_client;
+    while (tmp != NULL) {
+        if (np->socket_fd != tmp->socket_fd) { // all clients except itself.
+            printf("Send to sockfd %d: \"%s\" \n", tmp->socket_fd, tmp_buffer);
+            send(tmp->socket_fd, tmp_buffer, LENGTH_SEND, 0);
+        }
+        tmp = tmp->next;
+    }
+}
+*/
+
+
+
+
 //
 client_list *new_node (int sockfd, char *ip) {
     client_list *np = (client_list *) malloc (sizeof (client_list));
